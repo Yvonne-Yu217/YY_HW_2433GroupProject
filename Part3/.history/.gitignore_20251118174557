@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+egg-info/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs and local data
+logs/
+*.log
+
+# Ignore CSV data files (large data kept out of repo). If you want to include data, remove these lines.
+data/*.csv
+data/healthcare.gov/*.csv
+
+# Optional: ignore outputs and temp files
+outputs/
+
+# Python packaging
+pip-wheel-metadata/
+
+# Pytest cache
+.pytest_cache/
