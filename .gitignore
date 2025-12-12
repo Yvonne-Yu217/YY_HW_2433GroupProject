@@ -137,3 +137,24 @@ cython_debug/
 # OS specific
 .DS_Store
 Thumbs.db
+
+.joblib
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.pkl
+*.zip
+*.tar.gz
+*.db
+*.sqlite
+*.sqlite3
+
+# Specific data directories
+**/2433_p3_data/
+**/data/
+**/datasets/
+**/exports/
+
