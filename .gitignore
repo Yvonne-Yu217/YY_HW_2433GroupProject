@@ -139,6 +139,7 @@ cython_debug/
 Thumbs.db
 
 .joblib
+.history/
 
 # Data files
 *.csv
