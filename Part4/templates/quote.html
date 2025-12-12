@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Get Your Insurance Quote</h1>
+
+  {% if error_message %}
+    <div class="error">{{ error_message }}</div>
+  {% endif %}
+
+  <form method="post">
+    <label>Customer name (optional)
+      <input type="text" name="customer_name" value="{{ customer_name or '' }}" />
+    </label>
+
+    <label>Age (optional)
+      <input type="number" name="age" min="0" max="120" value="{{ age or '' }}" />
+    </label>
+
+    <label>Coverage percentage
+      <select name="percentage">
+        {% for p in percentage_options %}
+          <option value="{{ p }}" {% if selected_percentage and selected_percentage==p %}selected{% endif %}>{{ p }}%</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div class="row">
+      <div class="col">
+        <label>State
+          <select name="state">
+            {% for s in states %}
+              <option value="{{ s }}" {% if s==selected_state %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="col">
+        <label>Plan
+          <select name="plan">
+            {% if plans %}
+              {% for p in plans %}
+                <option value="{{ p }}" {% if p==selected_plan %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="">-- No plans available --</option>
+            {% endif %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label>Deductible
+          <select name="deductible">
+            {% if deductibles %}
+              {% for d in deductibles %}
+                <option value="{{ d }}" {% if selected_deductible and d==selected_deductible %}selected{% elif request.form.get('deductible') and request.form.get('deductible')|int == d %}selected{% endif %}>${{ d }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="">-- Select state/plan first --</option>
+            {% endif %}
+          </select>
+        </label>
+      </div>
+
+      <div class="col">
+        <label>Coverage Tier
+          <select name="coverage_tier">
+            {% if tiers %}
+              {% for t in tiers %}
+                <option value="{{ t }}" {% if selected_coverage_tier and t==selected_coverage_tier %}selected{% elif request.form.get('coverage_tier')==t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="">-- Select state/plan first --</option>
+            {% endif %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn" type="submit">Get Quote</button>
+  </form>
+
+  {% if result %}
+    <h2>Quote Result</h2>
+    <div class="result">
+      <p><strong>Customer:</strong> {{ customer_name or 'N/A' }}</p>
+      <p><strong>State:</strong> {{ selected_state }}</p>
+      <p><strong>Plan:</strong> {{ selected_plan }}</p>
+      <p><strong>Deductible:</strong> ${{ request.form.get('deductible') }}</p>
+      <p><strong>Coverage Tier:</strong> {{ request.form.get('coverage_tier') }}</p>
+      <hr />
+      <!-- <p><strong>State base rate (this year):</strong> {% if result.base_state_this_year is not none %}${{ result.base_state_this_year }}{% else %}N/A{% endif %}</p>
+      <p><strong>Predicted state base rate (next year):</strong> {% if result.base_state_next_year is not none %}${{ result.base_state_next_year }}{% else %}N/A{% endif %}</p> -->
+      <p class="current-price">Current Monthly Premium: ${{ result.current_premium }}</p>
+      {% if result.next_year %}
+        <p><strong>Estimated Premium for {{ result.next_year.year }}:</strong> ${{ result.next_year.projected_current_premium }}</p>
+      {% endif %}
+
+      <!-- Proceed to application (prefill form) -->
+      <form method="get" action="/apply" style="margin-top:0.6rem">
+        <input type="hidden" name="state" value="{{ selected_state }}" />
+        <input type="hidden" name="plan" value="{{ selected_plan }}" />
+        <input type="hidden" name="deductible" value="{{ request.form.get('deductible') }}" />
+        <input type="hidden" name="coverage_tier" value="{{ request.form.get('coverage_tier') }}" />
+        <input type="hidden" name="customer_name" value="{{ customer_name or '' }}" />
+        <input type="hidden" name="age" value="{{ age or '' }}" />
+        <input type="hidden" name="percentage" value="{{ selected_percentage or '' }}" />
+        <button class="btn" type="submit">Proceed to Application</button>
+      </form>
+    </div>
+  {% endif %}
+
+<script>
+// Client-side dynamic updates for dependent selects (state -> plan -> deductible/tier)
+const PLAN_OPTIONS = {{ plan_options|tojson }};
+const PLAN_DETAILS = {{ plan_details|tojson }};
+const INITIAL_SELECTED_STATE = {{ selected_state|tojson }};
+const INITIAL_SELECTED_PLAN = {{ selected_plan|tojson }};
+const INITIAL_SELECTED_DEDUCTIBLE = {{ selected_deductible|tojson }};
+const INITIAL_SELECTED_COVERAGE_TIER = {{ selected_coverage_tier|tojson }};
+
+function populateSelect(selectElem, items, labelFn) {
+  selectElem.innerHTML = '';
+  if (!items || items.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.text = '-- Select state/plan first --';
+    selectElem.appendChild(opt);
+    return;
+  }
+  for (let it of items) {
+    const opt = document.createElement('option');
+    opt.value = String(it);
+    opt.text = labelFn ? labelFn(it) : String(it);
+    selectElem.appendChild(opt);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const stateSel = document.querySelector('select[name="state"]');
+  const planSel = document.querySelector('select[name="plan"]');
+  const dedSel = document.querySelector('select[name="deductible"]');
+  const tierSel = document.querySelector('select[name="coverage_tier"]');
+
+  function updatePlansForState(state) {
+    const plans = PLAN_OPTIONS[state] || [];
+    populateSelect(planSel, plans);
+    // try to preserve initial selection
+    if (INITIAL_SELECTED_PLAN && plans.includes(INITIAL_SELECTED_PLAN)) {
+      planSel.value = INITIAL_SELECTED_PLAN;
+    } else if (plans.length > 0) {
+      planSel.selectedIndex = 0;
+    }
+    updateDetailsForPlan(state, planSel.value);
+  }
+
+  function updateDetailsForPlan(state, plan) {
+    const details = (PLAN_DETAILS[state] && PLAN_DETAILS[state][plan]) || {};
+    const deductibles = details.deductibles || [];
+    const tiers = details.tiers || [];
+    populateSelect(dedSel, deductibles, function (v) { return '$' + v; });
+    populateSelect(tierSel, tiers);
+
+    // restore any initial selections if valid
+    if (INITIAL_SELECTED_DEDUCTIBLE && deductibles.map(String).includes(String(INITIAL_SELECTED_DEDUCTIBLE))) {
+      dedSel.value = String(INITIAL_SELECTED_DEDUCTIBLE);
+    }
+    if (INITIAL_SELECTED_COVERAGE_TIER && tiers.includes(INITIAL_SELECTED_COVERAGE_TIER)) {
+      tierSel.value = INITIAL_SELECTED_COVERAGE_TIER;
+    }
+  }
+
+  stateSel.addEventListener('change', function (e) {
+    // Reset initial selection markers after first user change
+    // so subsequent changes reflect the user's choices
+    updatePlansForState(e.target.value);
+  });
+
+  planSel.addEventListener('change', function (e) {
+    updateDetailsForPlan(stateSel.value, e.target.value);
+  });
+
+  // Initialize selects on page load
+  const startState = stateSel.value || INITIAL_SELECTED_STATE || Object.keys(PLAN_OPTIONS)[0];
+  if (startState) updatePlansForState(startState);
+});
+</script>
+
+{% endblock %}

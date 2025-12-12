@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Apply / Provide Personal Information</h1>
+
+  {% if message %}
+    <div class="result">{{ message }}</div>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="state" value="{{ state }}" />
+    <input type="hidden" name="plan" value="{{ plan }}" />
+    <input type="hidden" name="deductible" value="{{ deductible }}" />
+    <input type="hidden" name="coverage_tier" value="{{ coverage_tier }}" />
+    <input type="hidden" name="percentage" value="{{ percentage or '' }}" />
+
+    <label>Customer name (required for application)
+      <input type="text" name="customer_name" value="{{ customer_name or '' }}" required />
+    </label>
+
+    <label>Age
+      <input type="number" name="age" value="{{ age or '' }}" />
+    </label>
+
+    <label>Email
+      <input type="email" name="email" value="{{ email or '' }}" required />
+    </label>
+
+    <label>Phone
+      <input type="text" name="phone" value="{{ phone or '' }}" />
+    </label>
+
+    <label>Address
+      <input type="text" name="address" value="{{ address or '' }}" />
+    </label>
+
+    <button class="btn" type="submit">Submit Application</button>
+  </form>
+
+  <hr />
+  <h3>Selected Quote</h3>
+  <div>
+    <p><strong>State:</strong> {{ state }}</p>
+    <p><strong>Plan:</strong> {{ plan }}</p>
+    <p><strong>Deductible:</strong> ${{ deductible }}</p>
+    <p><strong>Coverage Tier:</strong> {{ coverage_tier }}</p>
+    {% if current_premium %}
+      <p class="current-price">Current Monthly Premium: ${{ current_premium }}</p>
+    {% endif %}
+    <p style="margin-top:0.6rem"><a href="/quote?state={{ state }}&plan={{ plan }}&deductible={{ deductible }}&coverage_tier={{ coverage_tier }}&age={{ age }}&percentage={{ percentage }}">← Back to Quote</a></p>
+  </div>
+
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Annual Pricing Analytics and Model Retraining Output</h1>
+
+  {% if error_message %}
+    <div class="error">{{ error_message }}</div>
+  {% endif %}
+
+  <form method="post">
+    <label>State
+      <select name="state">
+        {% for s in states %}
+          <option value="{{ s }}" {% if s==selected_state %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Year
+      <select name="year">
+        {% for y in years %}
+          <option value="{{ y }}" {% if y==selected_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <button class="btn" type="submit">Get Predicted Base Rate</button>
+  </form>
+
+  {% if predicted_base_rate is not none %}
+    <h2>Predicted Base Rate</h2>
+    <div class="result">
+      <p><strong>State:</strong> {{ selected_state }}</p>
+      <p><strong>Year:</strong> {{ selected_year }}</p>
+      <p><strong>Predicted Base Rate:</strong> ${{ predicted_base_rate }}</p>
+      <hr />
+      <p>This value is produced by the ML pipeline using updated CDC health indicators and marketplace data.</p>
+      <p>These predictions are written to the ODS and used both for strategic analytics and real-time quoting.</p>
+    </div>
+  {% endif %}
+
+{% endblock %}
