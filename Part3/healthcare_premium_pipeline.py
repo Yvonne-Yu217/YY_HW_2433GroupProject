@@ -4,6 +4,8 @@ from pathlib import Path
 import joblib
 import os
 import warnings
+from sqlalchemy import create_engine, text
+import urllib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -88,13 +90,15 @@ class HealthcarePremiumPipeline:
         else:
             return 'Unknown'
 
-    def load_data(self, kff_path, cdc_path):
-        """Load raw datasets"""
-        print(f"Loading KFF data from {kff_path}...")
-        kff_df = pd.read_csv(kff_path)
+    def load_data(self, engine):
+        """Load raw datasets from Azure SQL"""
+        print("Loading KFF data from Azure SQL (datalake.kff_combined_raw)...")
+        kff_query = "SELECT * FROM datalake.kff_combined_raw"
+        kff_df = pd.read_sql(kff_query, engine)
         
-        print(f"Loading CDC data from {cdc_path}...")
-        cdc_df = pd.read_csv(cdc_path)
+        print("Loading CDC data from Azure SQL (datalake.cdc_aggregated_raw)...")
+        cdc_query = "SELECT * FROM datalake.cdc_aggregated_raw"
+        cdc_df = pd.read_sql(cdc_query, engine)
         
         return kff_df, cdc_df
 
@@ -293,19 +297,49 @@ class HealthcarePremiumPipeline:
 def main():
     # Configuration
     BASE_DIR = Path(__file__).parent
-    KFF_PATH = BASE_DIR / '2433_p3_data/KFF_data/exports/kff_combined_2018_2026.csv'
-    CDC_PATH = BASE_DIR / '2433_p3_data/healthcare.gov/exports/aggregated/aggregated_all_years.csv'
     MODEL_PATH = BASE_DIR / 'healthcare_premium_combined_model.joblib'
+    CONFIG_PATH = BASE_DIR / 'db_config.txt'
+    
+    # Load Database Configuration
+    if not CONFIG_PATH.exists():
+        print(f"Error: Configuration file not found at {CONFIG_PATH}")
+        return
+
+    config = {}
+    with open(CONFIG_PATH, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and '=' in line:
+                key, value = line.split('=', 1)
+                config[key.strip()] = value.strip()
+    
+    server = config.get('SERVER')
+    database = config.get('DATABASE')
+    username = config.get('USERNAME')
+    password = config.get('PASSWORD')
+    driver = config.get('DRIVER')
+    
+    if not all([server, database, username, password, driver]):
+        print("Error: Missing database configuration in db_config.txt")
+        return
+    
+    # Connection string
+    params = urllib.parse.quote_plus(
+        f'DRIVER={{{driver}}};SERVER={server};PORT=1433;DATABASE={database};UID={username};PWD={password}'
+    )
+    conn_str = f'mssql+pyodbc:///?odbc_connect={params}'
     
     # Initialize Pipeline
     pipeline = HealthcarePremiumPipeline()
     
     # 1. Load Data
-    if not KFF_PATH.exists() or not CDC_PATH.exists():
-        print("Data files not found. Please check paths.")
+    try:
+        engine = create_engine(conn_str)
+        print("Successfully connected to Azure SQL Database.")
+        kff_df, cdc_df = pipeline.load_data(engine)
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
         return
-
-    kff_df, cdc_df = pipeline.load_data(KFF_PATH, CDC_PATH)
     
     # 2. Preprocess
     kff_long = pipeline.preprocess_kff(kff_df)

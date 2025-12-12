@@ -159,3 +159,6 @@ Thumbs.db
 **/datasets/
 **/exports/
 
+
+# Database Configuration
+db_config.txt
