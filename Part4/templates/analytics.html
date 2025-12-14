@@ -28,14 +28,20 @@
   </form>
 
   {% if predicted_base_rate is not none %}
-    <h2>Predicted Base Rate</h2>
+    <h2>Prediction Data</h2>
     <div class="result">
       <p><strong>State:</strong> {{ selected_state }}</p>
       <p><strong>Year:</strong> {{ selected_year }}</p>
-      <p><strong>Predicted Base Rate:</strong> ${{ predicted_base_rate }}</p>
-      <hr />
-      <p>This value is produced by the ML pipeline using updated CDC health indicators and marketplace data.</p>
-      <p>These predictions are written to the ODS and used both for strategic analytics and real-time quoting.</p>
+      {% if prediction_data %}
+        <p><strong>Predicted Premium:</strong> ${{ prediction_data.predicted or 'N/A' }}</p>
+        {% if prediction_data.actual %}
+          <p><strong>Actual Premium:</strong> ${{ prediction_data.actual }}</p>
+        {% else %}
+          <p><strong>Actual Premium:</strong> N/A</p>
+        {% endif %}
+      {% else %}
+        <p><strong>Predicted Base Rate:</strong> ${{ predicted_base_rate }}</p>
+      {% endif %}
     </div>
   {% endif %}
 

@@ -9,29 +9,32 @@
 
   <form method="post">
     <input type="hidden" name="state" value="{{ state }}" />
-    <input type="hidden" name="plan" value="{{ plan }}" />
-    <input type="hidden" name="deductible" value="{{ deductible }}" />
-    <input type="hidden" name="coverage_tier" value="{{ coverage_tier }}" />
-    <input type="hidden" name="percentage" value="{{ percentage or '' }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="metal_level" value="{{ metal_level }}" />
+    <input type="hidden" name="age" value="{{ age or '' }}" />
+    <input type="hidden" name="year" value="{{ year or '' }}" />
+    <input type="hidden" name="avg_price" value="{{ avg_price }}" />
+    <input type="hidden" name="avg_deductible" value="{{ avg_deductible }}" />
+    <input type="hidden" name="avg_moop" value="{{ avg_moop }}" />
 
-    <label>Customer name (required for application)
+    <label>Customer name (required)
       <input type="text" name="customer_name" value="{{ customer_name or '' }}" required />
     </label>
 
     <label>Age
-      <input type="number" name="age" value="{{ age or '' }}" />
+      <input type="text" name="age_display" value="{{ age or '' }}" readonly disabled style="background-color: #f5f5f5; cursor: not-allowed;" />
     </label>
 
-    <label>Email
-      <input type="email" name="email" value="{{ email or '' }}" required />
+    <label>Email (required)
+      <input type="text" name="email" value="{{ email or '' }}" required />
     </label>
 
-    <label>Phone
-      <input type="text" name="phone" value="{{ phone or '' }}" />
+    <label>Phone (required)
+      <input type="text" name="phone" value="{{ phone or '' }}" required />
     </label>
 
-    <label>Address
-      <input type="text" name="address" value="{{ address or '' }}" />
+    <label>Address (required)
+      <input type="text" name="address" value="{{ address or '' }}" required />
     </label>
 
     <button class="btn" type="submit">Submit Application</button>
@@ -40,14 +43,25 @@
   <hr />
   <h3>Selected Quote</h3>
   <div>
-    <p><strong>State:</strong> {{ state }}</p>
-    <p><strong>Plan:</strong> {{ plan }}</p>
-    <p><strong>Deductible:</strong> ${{ deductible }}</p>
-    <p><strong>Coverage Tier:</strong> {{ coverage_tier }}</p>
-    {% if current_premium %}
-      <p class="current-price">Current Monthly Premium: ${{ current_premium }}</p>
+    <p><strong>Location:</strong> {{ state }}</p>
+    <p><strong>Postcode (Area):</strong> {{ area }}</p>
+    <p><strong>Metal Level:</strong> {{ metal_level }}</p>
+    {% if age %}
+      <p><strong>Age:</strong> {{ age }}</p>
     {% endif %}
-    <p style="margin-top:0.6rem"><a href="/quote?state={{ state }}&plan={{ plan }}&deductible={{ deductible }}&coverage_tier={{ coverage_tier }}&age={{ age }}&percentage={{ percentage }}">← Back to Quote</a></p>
+    {% if year %}
+      <p><strong>Year:</strong> {{ year }}</p>
+    {% endif %}
+    {% if avg_price %}
+      <p class="current-price"><strong>Estimated Premium:</strong> ${{ avg_price }}</p>
+    {% endif %}
+    {% if avg_deductible %}
+      <p><strong>Estimated Deductible:</strong> ${{ avg_deductible }}</p>
+    {% endif %}
+    {% if avg_moop %}
+      <p><strong>Estimated MOOP:</strong> ${{ avg_moop }}</p>
+    {% endif %}
+    <p style="margin-top:0.6rem"><a href="/quote?state={{ state }}&area={{ area }}&metal_level={{ metal_level }}">← Back to Quote</a></p>
   </div>
 
 {% endblock %}
