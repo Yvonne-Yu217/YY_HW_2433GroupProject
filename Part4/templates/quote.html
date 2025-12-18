@@ -1,0 +1,643 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <style>
+    select:disabled, input:disabled {
+      background-color: #f5f5f5;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    #stateLoading, #areaLoading, #metalLevelLoading, #ageLoading {
+      margin-left: 0.5rem;
+      font-style: italic;
+    }
+  </style>
+  <h1>Get Your Insurance Quote</h1>
+
+  {% if error_message %}
+    <div class="error">{{ error_message }}</div>
+  {% endif %}
+
+  <form method="post" id="quoteForm">
+    <div class="row">
+      <div class="col">
+        <label>Location (State)
+          <select name="state" id="stateSelect" required>
+            <option value="">-- Loading Locations... --</option>
+            {% for s in states %}
+              <option value="{{ s }}" {% if s==selected_state %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <span id="stateLoading" style="display: none; color: #666; font-size: 0.9em;">Loading locations...</span>
+        </label>
+      </div>
+      <div class="col">
+        <label>Postcode (Area)
+          <select name="area" id="areaSelect" required disabled>
+            <option value="">-- Loading Postcodes... --</option>
+            {% if areas %}
+              {% for a in areas %}
+                <option value="{{ a }}" {% if a==selected_area %}selected{% endif %}>{{ a }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+          <span id="areaLoading" style="display: none; color: #666; font-size: 0.9em;">Loading postcodes...</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <label>Age
+          <select name="age" id="ageSelect" required disabled>
+            <option value="">-- Loading Ages... --</option>
+            {% if selected_age %}
+              <option value="{{ selected_age }}" selected>{{ selected_age }}</option>
+            {% endif %}
+          </select>
+          <span id="ageLoading" style="display: none; color: #666; font-size: 0.9em;">Loading ages...</span>
+        </label>
+      </div>
+      <div class="col">
+        <label>Metal Level
+          <select name="metal_level" id="metalLevelSelect" required disabled>
+            <option value="">-- Select Location, Postcode and Age First --</option>
+            {% if metal_levels %}
+              {% for ml in metal_levels %}
+                <option value="{{ ml }}" {% if ml==selected_metal_level %}selected{% endif %}>{{ ml }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+          <span id="metalLevelLoading" style="display: none; color: #666; font-size: 0.9em;">Loading metal levels...</span>
+        </label>
+      </div>
+    </div>
+
+    <input type="hidden" name="year" value="2025" />
+    <!-- Hidden fields to store pricing data from preview (to avoid re-querying database) -->
+    <input type="hidden" name="avg_price" id="hiddenAvgPrice" value="" />
+    <input type="hidden" name="avg_deductible" id="hiddenAvgDeductible" value="" />
+    <input type="hidden" name="avg_moop" id="hiddenAvgMOOP" value="" />
+  </form>
+
+  {% if result %}
+    <h2>Selected Quote Details</h2>
+    <div class="result">
+      <p><strong>Location:</strong> {{ selected_state }}</p>
+      <p><strong>Postcode (Area):</strong> {{ selected_area }}</p>
+      <p><strong>Metal Level:</strong> {{ selected_metal_level }}</p>
+      <p><strong>Age:</strong> {{ selected_age }}</p>
+      <p><strong>Year:</strong> 2025</p>
+      <hr />
+      <p class="current-price"><strong>Estimated Premium:</strong> ${{ result.avg_price }}</p>
+      <p><strong>Estimated Deductible:</strong> ${{ result.avg_deductible }}</p>
+      <p><strong>Estimated MOOP:</strong> ${{ result.avg_moop }}</p>
+      {% if result.predicted_next_year %}
+        <p><strong>Predicted Estimated Premium for {{ result.predicted_next_year.year }}:</strong> ${{ result.predicted_next_year.predicted_avg_price }}</p>
+      {% endif %}
+
+      <!-- Proceed to application (prefill form) -->
+      <form method="get" action="/apply" style="margin-top:0.6rem">
+        <input type="hidden" name="state" value="{{ selected_state }}" />
+        <input type="hidden" name="area" value="{{ selected_area }}" />
+        <input type="hidden" name="metal_level" value="{{ selected_metal_level }}" />
+        <input type="hidden" name="age" value="{{ selected_age or '' }}" />
+        <input type="hidden" name="avg_price" value="{{ result.avg_price }}" />
+        <input type="hidden" name="avg_deductible" value="{{ result.avg_deductible }}" />
+        <input type="hidden" name="avg_moop" value="{{ result.avg_moop }}" />
+        <button class="btn" type="submit">Proceed to Application</button>
+      </form>
+    </div>
+  {% endif %}
+
+<script>
+// Client-side dynamic updates for dependent fields
+document.addEventListener('DOMContentLoaded', function () {
+  const stateSel = document.querySelector('#stateSelect');
+  const areaSel = document.querySelector('#areaSelect');
+  const metalLevelSel = document.querySelector('#metalLevelSelect');
+  const ageSel = document.querySelector('#ageSelect');
+  const stateLoading = document.querySelector('#stateLoading');
+  const areaLoading = document.querySelector('#areaLoading');
+  const metalLevelLoading = document.querySelector('#metalLevelLoading');
+  const ageLoading = document.querySelector('#ageLoading');
+  
+  // Store all location-postcode pairs
+  let locationPostcodePairs = [];
+  // Store all plan options (metal level + age combinations with pricing) in memory
+  let planOptionsCache = [];
+  // Store submitted quote details (persists when metal level changes)
+  let submittedQuoteDetails = null;
+  const preselectedState = stateSel.value && stateSel.value !== '' && stateSel.value !== '-- Loading Locations... --' ? stateSel.value : null;
+  const preselectedArea = areaSel.value && areaSel.value !== '' && areaSel.value !== '-- Loading Postcodes... --' ? areaSel.value : null;
+
+  function populateSelect(selectElem, items, placeholder, preserveValue = false) {
+    const currentValue = preserveValue ? selectElem.value : '';
+    selectElem.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.text = placeholder;
+    selectElem.appendChild(opt);
+    
+    if (items && items.length > 0) {
+      for (let item of items) {
+        const opt = document.createElement('option');
+        opt.value = String(item);
+        opt.text = String(item);
+        selectElem.appendChild(opt);
+      }
+      // Try to restore previous selection
+      if (currentValue && Array.from(selectElem.options).some(opt => opt.value === currentValue)) {
+        selectElem.value = currentValue;
+      }
+    }
+  }
+
+  // Load location-postcode pairs and age options on page load
+  // Server-side caching handles persistence - loads from cache files, no DB query needed
+  function loadInitialData() {
+    // Load location-postcode pairs from server cache (fast, no DB query)
+    stateLoading.style.display = 'inline';
+    stateSel.disabled = true;
+    areaSel.disabled = true;
+    
+    fetch('/api/location-postcode-pairs')
+      .then(response => response.json())
+      .then(data => {
+        locationPostcodePairs = data.pairs || [];
+        
+        // Extract unique states
+        const uniqueStates = [...new Set(locationPostcodePairs.map(p => p.state))].sort();
+        
+        // Populate state dropdown
+        stateSel.innerHTML = '<option value="">-- Select Location --</option>';
+        for (let state of uniqueStates) {
+          const opt = document.createElement('option');
+          opt.value = String(state);
+          opt.text = String(state);
+          stateSel.appendChild(opt);
+        }
+        
+        // Restore preselected state if exists
+        if (preselectedState && Array.from(stateSel.options).some(opt => opt.value === preselectedState)) {
+          stateSel.value = preselectedState;
+          updateAreasForState(preselectedState);
+        } else {
+          stateSel.disabled = false;
+          stateLoading.style.display = 'none';
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching location-postcode pairs:', error);
+        stateSel.innerHTML = '<option value="">-- Error loading locations --</option>';
+        stateSel.disabled = false;
+        stateLoading.style.display = 'none';
+      });
+
+    // Load ages from server cache (fast, no DB query - loaded from cache file)
+    ageLoading.style.display = 'inline';
+    ageSel.disabled = true;
+    
+    // Age is loaded from cache file, so this is fast and doesn't query the database
+    fetch('/api/ages')
+      .then(response => response.json())
+      .then(data => {
+        const currentValue = ageSel.value;
+        const ages = data.ages || [];
+        ageSel.innerHTML = '<option value="">-- Select Age --</option>';
+        if (ages && ages.length > 0) {
+          for (let age of ages) {
+            const opt = document.createElement('option');
+            opt.value = String(age);
+            opt.text = String(age);
+            ageSel.appendChild(opt);
+          }
+          if (currentValue && Array.from(ageSel.options).some(opt => opt.value === currentValue)) {
+            ageSel.value = currentValue;
+          }
+        }
+        ageSel.disabled = false;
+        ageLoading.style.display = 'none';
+      })
+      .catch(error => {
+        console.error('Error fetching ages:', error);
+        ageSel.innerHTML = '<option value="">-- Error loading ages --</option>';
+        ageSel.disabled = false;
+        ageLoading.style.display = 'none';
+      });
+  }
+
+  function updateAreasForState(state) {
+    if (!state) {
+      populateSelect(areaSel, [], '-- Select Location First --');
+      areaSel.disabled = true;
+      metalLevelSel.disabled = true;
+      populateSelect(metalLevelSel, [], '-- Select Location, Postcode and Age First --');
+      return;
+    }
+    
+    // Filter postcodes for the selected state from pre-loaded cached pairs (no server call)
+    const areasForState = locationPostcodePairs
+      .filter(pair => pair.state === state)
+      .map(pair => pair.area)
+      .filter((area, index, self) => self.indexOf(area) === index) // Remove duplicates
+      .sort();
+    
+    areaLoading.style.display = 'inline';
+    areaSel.disabled = true;
+    metalLevelSel.disabled = true;
+    populateSelect(metalLevelSel, [], '-- Select Location, Postcode and Age First --');
+    
+    // Small delay for UX
+    setTimeout(() => {
+      populateSelect(areaSel, areasForState, '-- Select Postcode --');
+      areaSel.disabled = false;
+      areaLoading.style.display = 'none';
+      stateSel.disabled = false;
+      stateLoading.style.display = 'none';
+      
+      // Restore preselected area if exists
+      if (preselectedArea && Array.from(areaSel.options).some(opt => opt.value === preselectedArea)) {
+        areaSel.value = preselectedArea;
+        // Check if age is also selected, then load metal levels
+        if (ageSel.value) {
+          updateMetalLevelsForStateAreaAndAge(state, preselectedArea, ageSel.value);
+        }
+      } else {
+        // Check if all three are selected after area is populated
+        if (ageSel.value) {
+          updateMetalLevelsForStateAreaAndAge(state, areaSel.value, ageSel.value);
+        }
+      }
+    }, 100);
+  }
+
+  function updateMetalLevelsForStateAreaAndAge(state, area, age) {
+    if (!state || !area || !age) {
+      populateSelect(metalLevelSel, [], '-- Select Location, Postcode and Age First --');
+      metalLevelSel.disabled = true;
+      planOptionsCache = [];
+      return;
+    }
+    
+    // Only load metal levels after all three (Location, Postcode, Age) are selected
+    // Age is already loaded from cache, so we don't reload it
+    // Show loading and disable metal level field
+    metalLevelLoading.style.display = 'inline';
+    metalLevelSel.disabled = true;
+    populateSelect(metalLevelSel, [], '-- Loading plan options... --');
+    
+    // Fetch metal level options with pricing for the selected state, area, and age
+    fetch(`/api/plan-options?state=${encodeURIComponent(state)}&area=${encodeURIComponent(area)}&year=2025&age=${encodeURIComponent(age)}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Check for error in response
+        if (data.error) {
+          console.error('API error:', data.error);
+          populateSelect(metalLevelSel, [], `-- Error: ${data.error} --`);
+          metalLevelSel.disabled = false;
+          metalLevelLoading.style.display = 'none';
+          planOptionsCache = [];
+          return;
+        }
+        
+        planOptionsCache = data.options || [];
+        
+        // Extract metal levels from options, filter out null/undefined, and ensure uniqueness
+        const metalLevels = planOptionsCache
+          .map(opt => opt && opt.metal_level ? String(opt.metal_level).trim() : null)
+          .filter(ml => ml !== null && ml !== '');
+        
+        // Get unique metal levels using Set
+        const uniqueMetalLevels = [...new Set(metalLevels)].sort();
+        
+        console.log(`Loaded ${planOptionsCache.length} plan options, ${uniqueMetalLevels.length} unique metal levels for ${state}/${area} at age ${age}`);
+        console.log('Metal levels:', uniqueMetalLevels);
+        console.log('Plan options cache:', planOptionsCache);
+        
+        // Populate metal level dropdown
+        if (uniqueMetalLevels.length > 0) {
+          populateSelect(metalLevelSel, uniqueMetalLevels, '-- Select Metal Level --');
+          metalLevelSel.disabled = false;
+        } else {
+          populateSelect(metalLevelSel, [], '-- No metal levels available --');
+          metalLevelSel.disabled = true;
+        }
+        metalLevelLoading.style.display = 'none';
+      })
+      .catch(error => {
+        console.error('Error fetching plan options:', error);
+        populateSelect(metalLevelSel, [], '-- Error loading plan options --');
+        metalLevelSel.disabled = false;
+        metalLevelLoading.style.display = 'none';
+        planOptionsCache = [];
+      });
+  }
+  
+  // Function to get pricing for selected metal level from cache
+  function getPricingFromCache(metalLevel) {
+    if (!planOptionsCache || planOptionsCache.length === 0) {
+      return null;
+    }
+    
+    // Options are already filtered by age on the server, so just find by metal level
+    const option = planOptionsCache.find(opt => opt.metal_level === metalLevel);
+    
+    return option || null;
+  }
+  
+  // Function to update pricing display
+  function updatePricingDisplay() {
+    const metalLevel = metalLevelSel.value;
+    const age = ageSel.value;
+    
+    if (!metalLevel || !age || !stateSel.value || !areaSel.value) {
+      // Hide pricing display if not all required fields selected
+      const pricingDiv = document.getElementById('pricingPreview');
+      if (pricingDiv) {
+        pricingDiv.style.display = 'none';
+      }
+      // If there's a submitted quote, still show it
+      if (submittedQuoteDetails) {
+        renderAllQuotes();
+      }
+      return;
+    }
+    
+    const pricing = getPricingFromCache(metalLevel);
+    if (pricing) {
+      // Store pricing data in hidden form fields
+      document.getElementById('hiddenAvgPrice').value = pricing.avg_price;
+      document.getElementById('hiddenAvgDeductible').value = pricing.avg_deductible;
+      document.getElementById('hiddenAvgMOOP').value = pricing.avg_moop;
+      
+      // If there's a submitted quote, use renderAllQuotes to show both
+      if (submittedQuoteDetails) {
+        renderAllQuotes();
+      } else {
+        // No submitted quote, show preview in standalone preview div
+        let pricingDiv = document.getElementById('pricingPreview');
+        if (!pricingDiv) {
+          pricingDiv = document.createElement('div');
+          pricingDiv.id = 'pricingPreview';
+          pricingDiv.className = 'result';
+          pricingDiv.style.marginTop = '1rem';
+          pricingDiv.style.display = 'none';
+          const quoteForm = document.getElementById('quoteForm');
+          if (quoteForm && quoteForm.parentNode) {
+            quoteForm.parentNode.insertBefore(pricingDiv, quoteForm.nextSibling);
+          }
+        }
+        
+        const ageText = ageSel.options[ageSel.selectedIndex].text;
+        let estimatedHtml = '';
+        if (pricing.estimated_premium_next_year !== undefined) {
+          estimatedHtml = `<p style="margin-top: 0.5rem;"><strong>Estimated Premium Next Year:</strong> $${pricing.estimated_premium_next_year}</p>`;
+        }
+        pricingDiv.innerHTML = `
+          <h3>Plan Details Preview</h3>
+          <p><strong>Metal Level:</strong> ${pricing.metal_level}</p>
+          <p><strong>Age:</strong> ${ageText}</p>
+          <p><strong>Estimated Deductible:</strong> $${pricing.avg_deductible}</p>
+          <p><strong>Estimated MOOP:</strong> $${pricing.avg_moop}</p>
+          <p style="font-size: 1.4rem; font-weight: 700; color: #c0392b; background: #fff6f6; padding: 0.4rem; border-radius: 4px; margin-top: 0.5rem;"><strong>Estimated Premium:</strong> $${pricing.avg_price}</p>
+          ${estimatedHtml}
+          <button class="btn" type="button" id="getQuoteBtn" style="margin-top: 1rem;">Get Quote</button>
+        `;
+        pricingDiv.style.display = 'block';
+        
+        // Add click handler to "Get Quote" button
+        const getQuoteBtn = document.getElementById('getQuoteBtn');
+        if (getQuoteBtn) {
+          // Remove any existing listeners by cloning the button
+          const newBtn = getQuoteBtn.cloneNode(true);
+          getQuoteBtn.parentNode.replaceChild(newBtn, getQuoteBtn);
+          newBtn.addEventListener('click', function() {
+            handleGetQuote(pricing);
+          });
+        }
+      }
+    } else {
+      const pricingDiv = document.getElementById('pricingPreview');
+      if (pricingDiv) {
+        pricingDiv.style.display = 'none';
+      }
+      // Clear hidden fields if pricing not available
+      document.getElementById('hiddenAvgPrice').value = '';
+      document.getElementById('hiddenAvgDeductible').value = '';
+      document.getElementById('hiddenAvgMOOP').value = '';
+      
+      // If there's a submitted quote, still show it
+      if (submittedQuoteDetails) {
+        renderAllQuotes();
+      }
+    }
+  }
+
+  stateSel.addEventListener('change', function (e) {
+    updateAreasForState(e.target.value);
+    // Reset area selection when state changes
+    areaSel.value = '';
+    metalLevelSel.disabled = true;
+    populateSelect(metalLevelSel, [], '-- Select Location, Postcode and Age First --');
+    planOptionsCache = [];
+    // Hide pricing preview and clear submitted quote when state changes
+    const pricingDiv = document.getElementById('pricingPreview');
+    if (pricingDiv) {
+      pricingDiv.style.display = 'none';
+    }
+    submittedQuoteDetails = null;
+    const quotesContainer = document.getElementById('quotesContainer');
+    if (quotesContainer) {
+      quotesContainer.innerHTML = '';
+    }
+  });
+  
+  areaSel.addEventListener('change', function (e) {
+    // Clear cache and reset metal level when area changes
+    planOptionsCache = [];
+    metalLevelSel.value = '';
+    metalLevelSel.disabled = true;
+    populateSelect(metalLevelSel, [], '-- Select Age First --');
+    const pricingDiv = document.getElementById('pricingPreview');
+    if (pricingDiv) {
+      pricingDiv.style.display = 'none';
+    }
+    submittedQuoteDetails = null;
+    const quotesContainer = document.getElementById('quotesContainer');
+    if (quotesContainer) {
+      quotesContainer.innerHTML = '';
+    }
+    // Don't load metal levels yet - wait for age to be selected
+    // Only load if all three (state, area, age) are selected
+    if (stateSel.value && e.target.value && ageSel.value) {
+      updateMetalLevelsForStateAreaAndAge(stateSel.value, e.target.value, ageSel.value);
+    }
+  });
+  
+  // Update pricing display when metal level changes
+  metalLevelSel.addEventListener('change', function (e) {
+    // If there's a submitted quote, use renderAllQuotes to show both submitted and preview
+    if (submittedQuoteDetails) {
+      updatePricingDisplay(); // This will call renderAllQuotes if submittedQuoteDetails exists
+    } else {
+      updatePricingDisplay();
+    }
+  });
+  
+  ageSel.addEventListener('change', function (e) {
+    updatePricingDisplay();
+    // When age changes, reload metal levels only if state and area are already selected
+    if (stateSel.value && areaSel.value && e.target.value) {
+      updateMetalLevelsForStateAreaAndAge(stateSel.value, areaSel.value, e.target.value);
+    } else {
+      // If age is cleared or state/area not selected, disable metal level
+      metalLevelSel.disabled = true;
+      populateSelect(metalLevelSel, [], '-- Select Location, Postcode and Age First --');
+      planOptionsCache = [];
+      submittedQuoteDetails = null;
+      const quotesContainer = document.getElementById('quotesContainer');
+      if (quotesContainer) {
+        quotesContainer.innerHTML = '';
+      }
+    }
+  });
+
+  // Function to handle "Get Quote" button click
+  function handleGetQuote(pricing) {
+    if (!pricing || !stateSel.value || !areaSel.value || !metalLevelSel.value || !ageSel.value) {
+      return;
+    }
+    
+    // Store submitted quote details
+    submittedQuoteDetails = {
+      state: stateSel.value,
+      stateText: stateSel.options[stateSel.selectedIndex].text,
+      area: areaSel.value,
+      areaText: areaSel.options[areaSel.selectedIndex].text,
+      metal_level: metalLevelSel.value,
+      metalLevelText: metalLevelSel.options[metalLevelSel.selectedIndex].text,
+      age: ageSel.value,
+      ageText: ageSel.options[ageSel.selectedIndex].text,
+      avg_price: pricing.avg_price,
+      avg_deductible: pricing.avg_deductible,
+      avg_moop: pricing.avg_moop,
+      estimated_premium_next_year: pricing.estimated_premium_next_year,
+      year: 2025
+    };
+    
+    // Render all quotes (submitted + preview if different metal level)
+    renderAllQuotes();
+  }
+
+  // Function to render all quotes (submitted quote + preview if different)
+  function renderAllQuotes() {
+    const container = document.getElementById('quotesContainer');
+    if (!container) {
+      // Create container if it doesn't exist
+      const newContainer = document.createElement('div');
+      newContainer.id = 'quotesContainer';
+      const quoteForm = document.getElementById('quoteForm');
+      if (quoteForm && quoteForm.parentNode) {
+        quoteForm.parentNode.insertBefore(newContainer, quoteForm.nextSibling);
+      }
+      return renderAllQuotes(); // Retry after creating container
+    }
+    
+    let html = '';
+    
+    // Show preview first (if current metal level is different from submitted one)
+    const currentMetalLevel = metalLevelSel.value;
+    const currentAge = ageSel.value;
+    let currentPricing = null;
+    
+    if (currentMetalLevel && currentAge && stateSel.value && areaSel.value) {
+      currentPricing = getPricingFromCache(currentMetalLevel);
+      if (currentPricing && (!submittedQuoteDetails || submittedQuoteDetails.metal_level !== currentMetalLevel)) {
+        const ageText = ageSel.options[ageSel.selectedIndex].text;
+        let estimatedHtml = '';
+        if (currentPricing.estimated_premium_next_year !== undefined) {
+          estimatedHtml = `<p style="margin-top: 0.5rem;"><strong>Estimated Premium Next Year:</strong> $${currentPricing.estimated_premium_next_year}</p>`;
+        }
+        html += `
+          <div class="result" style="margin-top: 1rem;" id="currentPreview">
+            <h3>Plan Details Preview</h3>
+            <p><strong>Metal Level:</strong> ${currentPricing.metal_level}</p>
+            <p><strong>Age:</strong> ${ageText}</p>
+            <p><strong>Estimated Deductible:</strong> $${currentPricing.avg_deductible}</p>
+            <p><strong>Estimated MOOP:</strong> $${currentPricing.avg_moop}</p>
+            <p style="font-size: 1.4rem; font-weight: 700; color: #c0392b; background: #fff6f6; padding: 0.4rem; border-radius: 4px; margin-top: 0.5rem;"><strong>Estimated Premium:</strong> $${currentPricing.avg_price}</p>
+            ${estimatedHtml}
+            <button class="btn" type="button" id="getQuoteBtn" style="margin-top: 1rem;">Get Quote</button>
+          </div>
+        `;
+        
+        // Store pricing data in hidden form fields
+        document.getElementById('hiddenAvgPrice').value = currentPricing.avg_price;
+        document.getElementById('hiddenAvgDeductible').value = currentPricing.avg_deductible;
+        document.getElementById('hiddenAvgMOOP').value = currentPricing.avg_moop;
+      }
+    }
+    
+    // Show submitted quote after preview (if exists)
+    if (submittedQuoteDetails) {
+      html += `
+        <div class="result" style="margin-top: 1rem;">
+          <h2>Selected Quote Details</h2>
+          <p><strong>Location:</strong> ${submittedQuoteDetails.stateText}</p>
+          <p><strong>Postcode (Area):</strong> ${submittedQuoteDetails.areaText}</p>
+          <p><strong>Metal Level:</strong> ${submittedQuoteDetails.metalLevelText}</p>
+          <p><strong>Age:</strong> ${submittedQuoteDetails.ageText}</p>
+          <p><strong>Year:</strong> ${submittedQuoteDetails.year}</p>
+          <hr />
+          <p class="current-price"><strong>Estimated Premium:</strong> $${parseFloat(submittedQuoteDetails.avg_price).toFixed(2)}</p>
+          <p><strong>Estimated Deductible:</strong> $${parseFloat(submittedQuoteDetails.avg_deductible).toFixed(2)}</p>
+          <p><strong>Estimated MOOP:</strong> $${parseFloat(submittedQuoteDetails.avg_moop).toFixed(2)}</p>
+          ${submittedQuoteDetails.estimated_premium_next_year !== undefined ? `<p style="margin-top: 0.5rem;"><strong>Estimated Premium Next Year:</strong> $${submittedQuoteDetails.estimated_premium_next_year.toFixed(2)}</p>` : ''}
+
+          <!-- Proceed to application (prefill form) -->
+          <form method="get" action="/apply" style="margin-top:0.6rem">
+            <input type="hidden" name="state" value="${submittedQuoteDetails.state}" />
+            <input type="hidden" name="area" value="${submittedQuoteDetails.area}" />
+            <input type="hidden" name="metal_level" value="${submittedQuoteDetails.metal_level}" />
+            <input type="hidden" name="age" value="${submittedQuoteDetails.age}" />
+            <input type="hidden" name="avg_price" value="${submittedQuoteDetails.avg_price}" />
+            <input type="hidden" name="avg_deductible" value="${submittedQuoteDetails.avg_deductible}" />
+            <input type="hidden" name="avg_moop" value="${submittedQuoteDetails.avg_moop}" />
+            <button class="btn" type="submit">Proceed to Application</button>
+          </form>
+        </div>
+      `;
+    }
+    
+    container.innerHTML = html;
+    
+    // Re-attach event listener to "Get Quote" button if it exists
+    const getQuoteBtn = document.getElementById('getQuoteBtn');
+    if (getQuoteBtn && currentPricing) {
+      getQuoteBtn.addEventListener('click', function() {
+        handleGetQuote(currentPricing);
+      });
+    }
+    
+    // Hide the standalone preview if quotes container exists
+    const pricingDiv = document.getElementById('pricingPreview');
+    if (pricingDiv && container.innerHTML) {
+      pricingDiv.style.display = 'none';
+    }
+    
+    // Scroll to container
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // Load all initial data
+  loadInitialData();
+});
+</script>
+
+{% endblock %}

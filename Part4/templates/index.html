@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Welcome</h1>
+  <p>Please choose an option to continue:</p>
+
+  <div style="display:flex; gap:1rem; margin-top:1rem;">
+    <a href="/quote" style="flex:1; text-align:center; padding:1.2rem; background:#1976d2; color:white; text-decoration:none; border-radius:6px; font-weight:600">I am a Customer<br/><small style="font-weight:400">Estimate Your Insurance Quote</small></a>
+    <a href="/analytics" style="flex:1; text-align:center; padding:1.2rem; background:#388e3c; color:white; text-decoration:none; border-radius:6px; font-weight:600">I am a Stuff<br/><small style="font-weight:400">View Predicted Base Rates Panel</small></a>
+  </div>
+
+  <p style="margin-top:1rem; color:#555">Choose <strong>I am a customer</strong> to estimate a customer's premium, or <strong>Pricing Analytics</strong> to view model-predicted base rate panel.</p>
+
+{% endblock %}

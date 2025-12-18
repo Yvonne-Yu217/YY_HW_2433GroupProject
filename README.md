@@ -17,14 +17,14 @@ The application integrates a robust data pipeline (Raw Data -> Data Lake -> Data
 ### 1. Customer Portal (Quote & Apply)
 The customer-facing interface allows users to easily navigate, get quotes, and apply for insurance plans.
 
-![Customer Portal Demo](../report/Customer.gif)
+![Customer Portal Demo](report/Customer.gif)
 
 *Figure 1: Customer workflow - from landing page to generating a quote.*
 
 ### 2. Staff Dashboard (Analytics)
 The internal dashboard provides staff with powerful tools to analyze market data, view price trends across different states, and make informed decisions.
 
-![Staff Dashboard Demo](../report/Stuff.gif)
+![Staff Dashboard Demo](report/Stuff.gif)
 
 *Figure 2: Staff workflow - accessing analytics and visualizing data trends.*
 

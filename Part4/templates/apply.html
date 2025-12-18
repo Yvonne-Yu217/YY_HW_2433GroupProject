@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Apply / Provide Personal Information</h1>
+
+  {% if message %}
+    <div class="result">{{ message }}</div>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="state" value="{{ state }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="metal_level" value="{{ metal_level }}" />
+    <input type="hidden" name="age" value="{{ age or '' }}" />
+    <input type="hidden" name="year" value="{{ year or '' }}" />
+    <input type="hidden" name="avg_price" value="{{ avg_price }}" />
+    <input type="hidden" name="avg_deductible" value="{{ avg_deductible }}" />
+    <input type="hidden" name="avg_moop" value="{{ avg_moop }}" />
+
+    <label>Customer name (required)
+      <input type="text" name="customer_name" value="{{ customer_name or '' }}" required />
+    </label>
+
+    <label>Age
+      <input type="text" name="age_display" value="{{ age or '' }}" readonly disabled style="background-color: #f5f5f5; cursor: not-allowed;" />
+    </label>
+
+    <label>Email (required)
+      <input type="text" name="email" value="{{ email or '' }}" required />
+    </label>
+
+    <label>Phone (required)
+      <input type="text" name="phone" value="{{ phone or '' }}" required />
+    </label>
+
+    <label>Address (required)
+      <input type="text" name="address" value="{{ address or '' }}" required />
+    </label>
+
+    <button class="btn" type="submit">Submit Application</button>
+  </form>
+
+  <hr />
+  <h3>Selected Quote</h3>
+  <div>
+    <p><strong>Location:</strong> {{ state }}</p>
+    <p><strong>Postcode (Area):</strong> {{ area }}</p>
+    <p><strong>Metal Level:</strong> {{ metal_level }}</p>
+    {% if age %}
+      <p><strong>Age:</strong> {{ age }}</p>
+    {% endif %}
+    {% if year %}
+      <p><strong>Year:</strong> {{ year }}</p>
+    {% endif %}
+    {% if avg_price %}
+      <p class="current-price"><strong>Estimated Premium:</strong> ${{ avg_price }}</p>
+    {% endif %}
+    {% if avg_deductible %}
+      <p><strong>Estimated Deductible:</strong> ${{ avg_deductible }}</p>
+    {% endif %}
+    {% if avg_moop %}
+      <p><strong>Estimated MOOP:</strong> ${{ avg_moop }}</p>
+    {% endif %}
+    <p style="margin-top:0.6rem"><a href="/quote?state={{ state }}&area={{ area }}&metal_level={{ metal_level }}">← Back to Quote</a></p>
+  </div>
+
+{% endblock %}
