@@ -8,7 +8,6 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-report/
 build/
 develop-eggs/
 dist/
@@ -51,6 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+*.mov
 
 # Translations
 *.mo
