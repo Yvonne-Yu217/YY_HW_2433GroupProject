@@ -30,6 +30,8 @@ The internal dashboard provides staff with powerful tools to analyze market data
 
 ## How to Run
 
+> **Note:** The required database configuration (`db_config.txt`) and data files are available here: [Google Drive Link](https://drive.google.com/drive/folders/1ilIhNvPUp1VYflU-mRQgLT-oud0hPE8G?usp=sharing). Please download and place them in the appropriate directories before running.
+
 1.  **Prerequisites:** Ensure Python 3.8+ is installed.
 2.  **Install Dependencies:**
     ```bash
